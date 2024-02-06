@@ -240,6 +240,17 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp)
     else
         mCurrentFrame = Frame(mImGray,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
 
+    // save image
+    string imageName = "/home/swm/debug/image/"+to_string(mCurrentFrame.mTimeStamp)+".png";
+    cv::imwrite(imageName, mImGray);
+
+    // DEBUG : 타임싱크 맞추기
+    // std::cout<<"[GrabImageMonocular] Timestamp(before) : "<<timestamp<<std::endl;
+    // std::cout<<"[GrabImageMonocular] Timestamp : "<<mCurrentFrame.mTimeStamp<<std::endl;
+
+    // cv::imshow("image", im);
+    // cv::waitKey(1);
+
     Track();
 
     return mCurrentFrame.mTcw.clone();
@@ -247,6 +258,7 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp)
 
 void Tracking::Track()
 {
+    int val = 0;
     if(mState==NO_IMAGES_YET)
     {
         mState = NOT_INITIALIZED;
@@ -284,21 +296,69 @@ void Tracking::Track()
             {
                 // Local Mapping might have changed some MapPoints tracked in last frame
                 CheckReplacedInLastFrame();
-
                 if(mVelocity.empty() || mCurrentFrame.mnId<mnLastRelocFrameId+2)
                 {
                     bOK = TrackReferenceKeyFrame();
+                    string filePath = "/home/swm/debug/tracking/SearchByProjection_alldist.txt";
+                    ofstream Writer;
+                    Writer.open(filePath.data(), std::ios::app);
+                    Writer.precision(6);
+                    Writer.setf(ios_base:: fixed, ios_base:: floatfield);
+                    if(Writer.is_open()){
+                        Writer<<"Tracking First"<<"\n";
+                    }
                 }
-                else
+                else // here
                 {
                     bOK = TrackWithMotionModel();
-                    if(!bOK)
+                    string filePath = "/home/swm/debug/tracking/SearchByProjection_alldist.txt";
+                    ofstream Writer;
+                    Writer.open(filePath.data(), std::ios::app);
+                    Writer.precision(6);
+                    Writer.setf(ios_base:: fixed, ios_base:: floatfield);
+                    if(bOK){
+                        if(Writer.is_open()){
+                            Writer<<"[TrackWithMotionModel] Good "<<"\n";
+                        }
+                        val = 1;
+                    }else{
+                        if(Writer.is_open()){
+                            Writer<<"[TrackWithMotionModel] Bad "<<"\n";
+                        }
+                    }
+                    if(!bOK){
                         bOK = TrackReferenceKeyFrame();
+                        if(bOK){
+                            if(Writer.is_open()){
+                                Writer<<"[TrackReferenceKeyFrame] Good "<<"\n";
+                            }
+                            val = 2;
+                        }else{
+                            if(Writer.is_open()){
+                                Writer<<"[TrackReferenceKeyFrame] Bad "<<"\n";
+                            }
+                        }
+                    }
                 }
             }
             else
             {
                 bOK = Relocalization();
+                string filePath = "/home/swm/debug/relocalization/SearchByProjection.txt";
+                ofstream Writer;
+                Writer.open(filePath.data(), std::ios::app);
+                Writer.precision(6);
+                Writer.setf(ios_base:: fixed, ios_base:: floatfield);
+                if(bOK){
+                    if(Writer.is_open()){
+                        Writer<<"[Relocalization] Good "<<"\n";
+                    }
+                    val = 3;
+                } else{
+                    if(Writer.is_open()){
+                        Writer<<"[Relocalization] Bad "<<"\n";
+                    }
+                }
             }
         }
         else
@@ -378,8 +438,13 @@ void Tracking::Track()
         // If we have an initial estimation of the camera pose and matching. Track the local map.
         if(!mbOnlyTracking)
         {
-            if(bOK)
+            if(bOK){
                 bOK = TrackLocalMap();
+                if(!bOK){
+                    std::cout<<"Finally Tracking fail..."<<std::endl;
+                }
+            }
+            
         }
         else
         {
@@ -483,6 +548,20 @@ void Tracking::Track()
         mlFrameTimes.push_back(mlFrameTimes.back());
         mlbLost.push_back(mState==LOST);
     }
+    // string Path = "/home/swm/debug/tracking/log.txt";
+    // ofstream f;
+    // f.open(Path.data(), std::ios::app);
+    // f.precision(6);
+    // f.setf(ios_base:: fixed, ios_base:: floatfield);
+    // cv::Mat mRcw = mCurrentFrame.mTcw.rowRange(0,3).colRange(0,3);
+    // cv::Mat mtcw = mCurrentFrame.mTcw.rowRange(0,3).col(3);
+    // cv::Mat mOw = -mRcw.t()*mtcw;
+    // if(f.is_open()){
+    //     f<<"Calculation "<<mCurrentFrame.mTimeStamp<<" "<<mCurrentFrame.mTcw.at<float>(0,0)<<" "<<mCurrentFrame.mTcw.at<float>(0,1)<<" "<<mCurrentFrame.mTcw.at<float>(0,2)<<" "<<mOw.at<float>(0)<<" "
+    //                     <<mCurrentFrame.mTcw.at<float>(1,0)<<" "<<mCurrentFrame.mTcw.at<float>(1,1)<<" "<<mCurrentFrame.mTcw.at<float>(1,2)<<" "<<mOw.at<float>(1)<<" "
+    //                     <<mCurrentFrame.mTcw.at<float>(2,0)<<" "<<mCurrentFrame.mTcw.at<float>(2,1)<<" "<<mCurrentFrame.mTcw.at<float>(2,2)<<" "<<mOw.at<float>(2)<<"\n";
+    // }
+    // f.close();
 
 }
 
@@ -565,7 +644,7 @@ void Tracking::MonocularInitialization()
             return;
         }
     }
-    else
+    else // here
     {
         // Try to initialize
         if((int)mCurrentFrame.mvKeys.size()<=100)
@@ -579,7 +658,17 @@ void Tracking::MonocularInitialization()
         // Find correspondences
         ORBmatcher matcher(0.9,true);
         int nmatches = matcher.SearchForInitialization(mInitialFrame,mCurrentFrame,mvbPrevMatched,mvIniMatches,100);
-
+        // int count_left = 0;
+        // int count_right = 0;
+        // for(int i=0; i<nmatches; i++){
+        //     float x = mvbPrevMatched[i].x;
+        //     if(x<960){
+        //         count_left = count_left + 1;
+        //     }else{
+        //         count_right = count_right + 1;
+        //     }
+        // }
+        // std::cout<<"Matced Features Num left : "<<count_left<<"  right : "<<count_right<<std::endl;
         // Check if there are enough correspondences
         if(nmatches<100)
         {
@@ -605,6 +694,7 @@ void Tracking::MonocularInitialization()
 
             // Set Frame Poses
             mInitialFrame.SetPose(cv::Mat::eye(4,4,CV_32F));
+            // std::cout<<"cv::Mat::eye(4,4,CV_32F) : "<<cv::Mat::eye(4,4,CV_32F)<<std::endl;
             cv::Mat Tcw = cv::Mat::eye(4,4,CV_32F);
             Rcw.copyTo(Tcw.rowRange(0,3).colRange(0,3));
             tcw.copyTo(Tcw.rowRange(0,3).col(3));
@@ -744,11 +834,26 @@ bool Tracking::TrackReferenceKeyFrame()
     // If enough matches are found we setup a PnP solver
     ORBmatcher matcher(0.7,true);
     vector<MapPoint*> vpMapPointMatches;
+    std::cout<<"####### [TrackReferenceKeyFrame] #######"<<std::endl;
+    std::cout<<"RefKeyFrame : "<<std::fixed<<mpReferenceKF->mTimeStamp<<std::endl;
+    std::cout<<"CurrentFrame : "<<std::fixed<<mCurrentFrame.mTimeStamp<<std::endl;
+    std::cout<<"First SearcjByBow"<<std::endl;
+    int nmatches = matcher.SearchByBoW(mpReferenceKF,mCurrentFrame,vpMapPointMatches, 0);
 
-    int nmatches = matcher.SearchByBoW(mpReferenceKF,mCurrentFrame,vpMapPointMatches);
+    string filePath = "/home/swm/debug/tracking/SearchByProjection_alldist.txt";
+    ofstream Writer_ref;
+    Writer_ref.open(filePath.data(), std::ios::app);
+    Writer_ref.precision(6);
+    Writer_ref.setf(ios_base:: fixed, ios_base:: floatfield);
 
-    if(nmatches<15)
+    if(nmatches<15){
+        std::cout<<"[SearchByBow 1] too small nmatches(<15)"<<std::endl;
+        std::cout<<"Tracking fail.."<<std::endl;
+        if(Writer_ref.is_open()){
+            Writer_ref<<"[TrackReferenceKeyFrame] nmatches (final) : "<<nmatches<<"\n";
+        }
         return false;
+    }
 
     mCurrentFrame.mvpMapPoints = vpMapPointMatches;
     mCurrentFrame.SetPose(mLastFrame.mTcw);
@@ -765,17 +870,36 @@ bool Tracking::TrackReferenceKeyFrame()
             {
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
 
+                if(Writer_ref.is_open()){
+                    Writer_ref<<"[TrackReferenceKeyFrame] DISCARD CurrentFrame mvKeysUn : "<<mCurrentFrame.mvKeysUn[i].pt.x<<" "<<mCurrentFrame.mvKeysUn[i].pt.y<<"\n";
+                }
+
                 mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
                 mCurrentFrame.mvbOutlier[i]=false;
                 pMP->mbTrackInView = false;
                 pMP->mnLastFrameSeen = mCurrentFrame.mnId;
                 nmatches--;
             }
-            else if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
-                nmatchesMap++;
+            else{
+                // std::cout<<"[TrackReferenceKeyFrame] index : "<<i<<std::endl;
+                if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
+                    nmatchesMap++;
+            }
         }
     }
 
+    // std::cout<<"TrackReferenceKeyFrame / nmatchesMap : "<<nmatchesMap<<std::endl;
+    if(nmatchesMap>=10){
+        std::cout<<"[TrackReferenceKeyFrame] nmatches : "<<nmatches<<std::endl;
+        std::cout<<"Tracking success..."<<std::endl;
+    }else{
+        std::cout<<"too small nmatchesMap(<10)"<<std::endl;
+        std::cout<<"Tracking fail..."<<std::endl;
+    }
+    if(Writer_ref.is_open()){
+        Writer_ref<<"[TrackReferenceKeyFrame] nmatches (final) : "<<nmatches<<"\n";
+    }
+    Writer_ref.close();
     return nmatchesMap>=10;
 }
 
@@ -855,6 +979,21 @@ bool Tracking::TrackWithMotionModel()
 
     mCurrentFrame.SetPose(mVelocity*mLastFrame.mTcw);
 
+    string Path = "/home/swm/debug/tracking/predict_pose.txt";
+    ofstream f;
+    f.open(Path.data(), std::ios::app);
+    f.precision(6);
+    f.setf(ios_base:: fixed, ios_base:: floatfield);
+    cv::Mat mRcw = mCurrentFrame.mTcw.rowRange(0,3).colRange(0,3);
+    cv::Mat mRwc = mRcw.t();
+    cv::Mat mtcw = mCurrentFrame.mTcw.rowRange(0,3).col(3);
+    cv::Mat mOw = -mRcw.t()*mtcw;
+    if(f.is_open()){
+        f<<"Prediction "<<mCurrentFrame.mTimeStamp<<" "<<mRcw.at<float>(0,0)<<" "<<mRcw.at<float>(0,1)<<" "<<mRcw.at<float>(0,2)<<" "<<mtcw.at<float>(0,0)<<" "
+                        <<mRcw.at<float>(1,0)<<" "<<mRcw.at<float>(1,1)<<" "<<mRcw.at<float>(1,2)<<" "<<mtcw.at<float>(1,0)<<" "
+                        <<mRcw.at<float>(2,0)<<" "<<mRcw.at<float>(2,1)<<" "<<mRcw.at<float>(2,2)<<" "<<mtcw.at<float>(2,0)<<"\n";
+    }
+    f.close();
     fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
 
     // Project points seen in previous frame
@@ -863,21 +1002,41 @@ bool Tracking::TrackWithMotionModel()
         th=15;
     else
         th=7;
+    std::cout<<"############ Tracking ############"<<std::endl;
+    std::cout<<"####### [TackWithMotionModel] #######"<<std::endl;
+    std::cout<<"LastFrame : "<<std::fixed<<mLastFrame.mTimeStamp<<std::endl;
+    std::cout<<"CurrentFrame : "<<std::fixed<<mCurrentFrame.mTimeStamp<<std::endl;
+    std::cout<<"First SearchByProjection"<<std::endl;
     int nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,th,mSensor==System::MONOCULAR);
+
+    string filePath = "/home/swm/debug/tracking/SearchByProjection_alldist.txt";
+    ofstream Writer_motion;
+    Writer_motion.open(filePath.data(), std::ios::app);
+    Writer_motion.precision(6);
+    Writer_motion.setf(ios_base:: fixed, ios_base:: floatfield);
 
     // If few matches, uses a wider window search
     if(nmatches<20)
     {
+        Writer_motion<<"[TrackWithMotionModel] Reprojection "<<"\n";
+        Writer_motion.close();
+        std::cout<<"[SearchByProjection 1] too small nmatches(<20)"<<std::endl;
+        std::cout<<"Second SearchByProjection"<<std::endl;
+
         fill(mCurrentFrame.mvpMapPoints.begin(),mCurrentFrame.mvpMapPoints.end(),static_cast<MapPoint*>(NULL));
         nmatches = matcher.SearchByProjection(mCurrentFrame,mLastFrame,2*th,mSensor==System::MONOCULAR);
     }
-
-    if(nmatches<20)
+    Writer_motion.open(filePath.data(), std::ios::app);
+    if(nmatches<20){
+        std::cout<<"[TrackWithMotionModel] too small nmatches(<20)"<<std::endl;
+        if(Writer_motion.is_open()){
+            Writer_motion<<"[TrackWithMotionModel] nmatches (final) : "<<nmatches<<"\n";
+        }
         return false;
-
+    }
     // Optimize frame pose with all matches
     Optimizer::PoseOptimization(&mCurrentFrame);
-
+    std::cout<<"[TrackWithMotionModel] nmatches (before optimization) : "<<nmatches<<std::endl;
     // Discard outliers
     int nmatchesMap = 0;
     for(int i =0; i<mCurrentFrame.N; i++)
@@ -888,23 +1047,42 @@ bool Tracking::TrackWithMotionModel()
             {
                 MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
 
+                if(Writer_motion.is_open()){
+                    Writer_motion<<"[TrackWithMotionModel] DISCARD CurrentFrame mvKeysUn : "<<mCurrentFrame.mvKeysUn[i].pt.x<<" "<<mCurrentFrame.mvKeysUn[i].pt.y<<"\n";
+                }
+
                 mCurrentFrame.mvpMapPoints[i]=static_cast<MapPoint*>(NULL);
                 mCurrentFrame.mvbOutlier[i]=false;
                 pMP->mbTrackInView = false;
                 pMP->mnLastFrameSeen = mCurrentFrame.mnId;
                 nmatches--;
             }
-            else if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
-                nmatchesMap++;
+            else{
+                // std::cout<<"[TrackWithMotionModel] index : "<<i<<std::endl;
+                if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
+                    nmatchesMap++;
+            }
         }
     }
+
+    if(Writer_motion.is_open()){
+        Writer_motion<<"[TrackWithMotionModel] nmatches (final) : "<<nmatches<<"\n";
+    }
+    Writer_motion.close();
 
     if(mbOnlyTracking)
     {
         mbVO = nmatchesMap<10;
         return nmatches>20;
     }
-
+    if(nmatchesMap>=10){
+        std::cout<<"[TrackWirhMotionModel] nmatches (final) : "<<nmatches<<std::endl;
+        std::cout<<"[TrackWirhMotionModel] nmatchesMap (final) : "<<nmatchesMap<<std::endl;
+        std::cout<<"[TrackWirhMotionModel] Tracking success.."<<std::endl;
+    }else{
+        std::cout<<"too small nmatchesMap(<10)"<<std::endl;
+        std::cout<<"[TrackWirhMotionModel] Tracking fail.."<<std::endl;
+    }
     return nmatchesMap>=10;
 }
 
@@ -912,6 +1090,22 @@ bool Tracking::TrackLocalMap()
 {
     // We have an estimation of the camera pose and some map points tracked in the frame.
     // We retrieve the local map and try to find matches to points in the local map.
+
+    // For Debug
+    ofstream Writer;
+    string filePath = "/home/swm/debug/tracklocalmap/tracklocalmap.txt";
+    Writer.open(filePath.data(), std::ios::app);
+    Writer.precision(6);
+    Writer.setf(ios_base:: fixed, ios_base:: floatfield);
+
+    const cv::Mat Rcw = mCurrentFrame.mTcw.rowRange(0,3).colRange(0,3);
+    const cv::Mat tcw = mCurrentFrame.mTcw.rowRange(0,3).col(3);
+    const cv::Mat Rcw_last = mLastFrame.mTcw.rowRange(0,3).colRange(0,3);
+    const cv::Mat tcw_last = mLastFrame.mTcw.rowRange(0,3).col(3);
+
+    if(Writer.is_open()){
+        Writer<<"[TrackLocalMap] CurrentFrame timestamp : "<<mCurrentFrame.mTimeStamp<<"\n";
+    }
 
     UpdateLocalMap();
 
@@ -926,13 +1120,39 @@ bool Tracking::TrackLocalMap()
     {
         if(mCurrentFrame.mvpMapPoints[i])
         {
-            if(!mCurrentFrame.mvbOutlier[i])
+            if(!mCurrentFrame.mvbOutlier[i]) // monocular/stereo 구분
             {
                 mCurrentFrame.mvpMapPoints[i]->IncreaseFound();
                 if(!mbOnlyTracking)
                 {
-                    if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
+                    if(mCurrentFrame.mvpMapPoints[i]->Observations()>0){
+                        // std::cout<<"[TrackLocalMap] index : "<<i<<std::endl;
+
+                        cv::Mat x3Dw = mCurrentFrame.mvpMapPoints[i]->GetWorldPos();
+                        cv::Mat x3Dc = Rcw*x3Dw+tcw;
+                        cv::Mat x3Dc_last = Rcw_last*x3Dw+tcw_last;
+
+                        const float xc = x3Dc.at<float>(0);
+                        const float yc = x3Dc.at<float>(1);
+                        const float invzc = 1.0/x3Dc.at<float>(2);
+
+                        const float xc_last = x3Dc_last.at<float>(0);
+                        const float yc_last = x3Dc_last.at<float>(1);
+                        const float invzc_last = 1.0/x3Dc_last.at<float>(2);
+
+                        const float u = mCurrentFrame.fx*xc*invzc+mCurrentFrame.cx;
+                        const float v = mCurrentFrame.fy*yc*invzc+mCurrentFrame.cy;
+
+                        const float u_last = mLastFrame.fx*xc_last*invzc_last+mLastFrame.cx;
+                        const float v_last = mLastFrame.fy*yc_last*invzc_last+mLastFrame.cy;
+
+                        if(Writer.is_open()){
+                            Writer<<"[TrackLocalMap] CurrentFrame mvKeysUn/map : "<<
+                                                mCurrentFrame.mvKeysUn[i].pt.x<<" "<<mCurrentFrame.mvKeysUn[i].pt.y<< " "<<
+                                                u<<" "<<v<<"\n";
+                        }
                         mnMatchesInliers++;
+                    }
                 }
                 else
                     mnMatchesInliers++;
@@ -945,13 +1165,25 @@ bool Tracking::TrackLocalMap()
 
     // Decide if the tracking was succesful
     // More restrictive if there was a relocalization recently
-    if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50)
+    std::cout<<"[TrackLocalMap] mnMatchesInliers : "<<mnMatchesInliers<<std::endl;
+    if(mCurrentFrame.mnId<mnLastRelocFrameId+mMaxFrames && mnMatchesInliers<50){
+        Writer<<"[TrackLocalMap] Bad"<<"\n";
+        Writer.close();
+        std::cout<<"[TrackLocalMap] Tracking Lost : too small mnMatchesInliers(<50)"<<std::endl;
         return false;
+    }
 
-    if(mnMatchesInliers<30)
+    if(mnMatchesInliers<30){
+        Writer<<"[TrackLocalMap] Bad"<<"\n";
+        Writer.close();
+        std::cout<<"[TrackLocalMap] Tracking Lost : too small mnMatchesInliers(<30)"<<std::endl;
         return false;
-    else
+    }
+    else{
+        Writer<<"[TrackLocalMap] Good"<<"\n";
+        Writer.close();
         return true;
+    }
 }
 
 
@@ -1047,6 +1279,7 @@ void Tracking::CreateNewKeyFrame()
         return;
 
     KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
+    // std::cout<<"[KeyFrame] Timestamp : "<<pKF->mTimeStamp<<std::endl;
 
     mpReferenceKF = pKF;
     mCurrentFrame.mpReferenceKF = pKF;
@@ -1348,17 +1581,24 @@ bool Tracking::Relocalization()
 
     int nCandidates=0;
 
+    std::cout<<"############ Relocalization ############"<<std::endl;
+    std::cout<<"CurrentFrame : "<<std::fixed<<mCurrentFrame.mTimeStamp<<std::endl;
+    std::cout<<"#### First Match ####"<<std::endl;
     for(int i=0; i<nKFs; i++)
     {
         KeyFrame* pKF = vpCandidateKFs[i];
-        if(pKF->isBad())
+        if(pKF->isBad()){
+            std::cout<<"KeyFrame("<<pKF->mTimeStamp<<") is Bad"<<std::endl;
             vbDiscarded[i] = true;
+        }
         else
         {
-            int nmatches = matcher.SearchByBoW(pKF,mCurrentFrame,vvpMapPointMatches[i]);
+            std::cout<<"KeyFrame : "<<std::fixed<<pKF->mTimeStamp<<std::endl;
+            int nmatches = matcher.SearchByBoW(pKF,mCurrentFrame,vvpMapPointMatches[i], 1);
             if(nmatches<15)
             {
                 vbDiscarded[i] = true;
+                std::cout<<"[SearchByBow 1] too small nmat8ches(<15) "<<std::endl;
                 continue;
             }
             else
@@ -1367,6 +1607,7 @@ bool Tracking::Relocalization()
                 pSolver->SetRansacParameters(0.99,10,300,4,0.5,5.991);
                 vpPnPsolvers[i] = pSolver;
                 nCandidates++;
+                std::cout<<"[SearchByBow 1] on going nmatches(>15) "<<std::endl;
             }
         }
     }
@@ -1378,10 +1619,14 @@ bool Tracking::Relocalization()
 
     while(nCandidates>0 && !bMatch)
     {
+        std::cout<<"#### Second Match ####"<<std::endl;
         for(int i=0; i<nKFs; i++)
         {
-            if(vbDiscarded[i])
+            std::cout<<"KeyFrame : "<<vpCandidateKFs[i]->mTimeStamp<<std::endl;
+            if(vbDiscarded[i]){
+                std::cout<<"Discarded at first match..."<<std::endl;
                 continue;
+            }
 
             // Perform 5 Ransac Iterations
             vector<bool> vbInliers;
@@ -1420,8 +1665,10 @@ bool Tracking::Relocalization()
 
                 int nGood = Optimizer::PoseOptimization(&mCurrentFrame);
 
-                if(nGood<10)
+                if(nGood<10){
+                    std::cout<<"too small nGood(first optimization)..."<<std::endl;
                     continue;
+                }
 
                 for(int io =0; io<mCurrentFrame.N; io++)
                     if(mCurrentFrame.mvbOutlier[io])
@@ -1430,6 +1677,7 @@ bool Tracking::Relocalization()
                 // If few inliers, search by projection in a coarse window and optimize again
                 if(nGood<50)
                 {
+                    std::cout<<"[SearchByProjection 1] start SearchByProjection after first optimization"<<std::endl;
                     int nadditional =matcher2.SearchByProjection(mCurrentFrame,vpCandidateKFs[i],sFound,10,100);
 
                     if(nadditional+nGood>=50)
@@ -1440,15 +1688,25 @@ bool Tracking::Relocalization()
                         // the camera has been already optimized with many points
                         if(nGood>30 && nGood<50)
                         {
+                            string filePath = "/home/swm/debug/relocalization/SearchByProjection.txt";
+                            ofstream Writer;
+                            Writer.open(filePath.data(), std::ios::app);
+                            Writer.precision(6);
+                            Writer.setf(ios_base:: fixed, ios_base:: floatfield);
+                            if(Writer.is_open()){
+                                Writer<<"[Relocalization, Projection] Reprojection "<<"\n";
+                            }
                             sFound.clear();
                             for(int ip =0; ip<mCurrentFrame.N; ip++)
                                 if(mCurrentFrame.mvpMapPoints[ip])
                                     sFound.insert(mCurrentFrame.mvpMapPoints[ip]);
+                            std::cout<<"[SearchByProjection 2] start SearchByProjection after second optimization"<<std::endl;
                             nadditional =matcher2.SearchByProjection(mCurrentFrame,vpCandidateKFs[i],sFound,3,64);
 
                             // Final optimization
                             if(nGood+nadditional>=50)
                             {
+                                std::cout<<"final optimization"<<std::endl;
                                 nGood = Optimizer::PoseOptimization(&mCurrentFrame);
 
                                 for(int io =0; io<mCurrentFrame.N; io++)
@@ -1463,20 +1721,86 @@ bool Tracking::Relocalization()
                 // If the pose is supported by enough inliers stop ransacs and continue
                 if(nGood>=50)
                 {
+                    std::cout<<"KeyFrame("<<vpCandidateKFs[i]->mTimeStamp<<") relocalization success"<<std::endl;
                     bMatch = true;
                     break;
+                }else {
+                    std::cout<<"KeyFrame("<<vpCandidateKFs[i]->mTimeStamp<<") relocalization fail"<<std::endl;
                 }
+            }else{
+                std::cout<<"If a Camera Pose is no computed, so can't optimize"<<std::endl;
             }
         }
     }
+    // Customize Initialization()
+    // if(!bMatch){
+    //     // Set Reference Frame
+    //     mvbLastMatched.resize(mLastFrame.mvKeysUn.size());
+    //     for(size_t i=0; i<mLastFrame.mvKeysUn.size(); i++)
+    //             mvbLastMatched[i]=mLastFrame.mvKeysUn[i].pt;
 
+    //     reInitializer = new Initializer(mCurrentFrame, 1.0, 200);
+
+    //     fill(mvRelocMatches.begin(),mvRelocMatches.end(),-1);
+
+    //     // Try to initialize
+    //     if((int)mCurrentFrame.mvKeys.size()<=100)
+    //     {
+    //         delete reInitializer;
+    //         reInitializer = static_cast<Initializer*>(NULL);
+    //         fill(mvRelocMatches.begin(),mvRelocMatches.end(),-1);
+    //         mCurrentFrame.mTcw = cv::Mat::zeros(0, 0, CV_32F); // this prevents a segfault later (https://github.com/raulmur/ORB_SLAM2/pull/381#issuecomment-337312336)
+    //         return false;
+    //     }
+
+    //     // Find correspendences
+    //     ORBmatcher matcher3(0.9, true);
+    //     int nmatches = matcher3.SearchForInitialization(mLastFrame,mCurrentFrame,mvbLastMatched,mvRelocMatches,100);
+    //     std::cout<<"[Relocalization/Initialization] nmatches1 : "<<nmatches<<std::endl;
+    //     // 우회전하거나 움직이는 사물이 많은 경우 matching 개수가 줄어듬
+
+    //     if(nmatches<100)
+    //     {
+    //         delete mpInitializer;
+    //         mpInitializer = static_cast<Initializer*>(NULL);
+            
+    //         mCurrentFrame.mTcw = cv::Mat::zeros(0, 0, CV_32F); // this prevents a segfault later (https://github.com/raulmur/ORB_SLAM2/pull/381#issuecomment-337312336)
+    //         std::cout<<"nmatches<100..."<<std::endl;
+    //         return false;
+    //     }
+
+    //     cv::Mat Rcw; // Current Camera Rotation
+    //     cv::Mat tcw; // Current Camera Translation
+    //     vector<bool> vbReTriangulated; // Triangulated Correspondences (mvIniMatches)
+
+    //     if(reInitializer->Initialize(mCurrentFrame, mvRelocMatches, Rcw, tcw, mvReP3D, vbReTriangulated)){
+    //         for(size_t i=0, iend=mvRelocMatches.size(); i<iend; i++){
+    //             if(mvRelocMatches[i]>=0 && !vbReTriangulated[i]){
+    //                 mvRelocMatches[i]=-1;
+    //                 nmatches--;
+    //             }
+    //         }
+    //         // Set Frame Poses
+    //         cv::Mat Tcw = cv::Mat::eye(4,4,CV_32F);
+    //         Rcw.copyTo(Tcw.rowRange(0,3).colRange(0,3));
+    //         tcw.copyTo(Tcw.rowRange(0,3).col(3));
+    //         mCurrentFrame.SetPose(Tcw);
+    //         std::cout<<"[Relocalization/Initialization] nmatches2 : "<<nmatches<<std::endl;
+
+    //         CreateInitialMapMonocular();
+    //         bMatch = true;
+            
+    //     }
+    // }
     if(!bMatch)
     {
+        std::cout<<"Relocalization fail.."<<std::endl;
         mCurrentFrame.mTcw = cv::Mat::zeros(0, 0, CV_32F); // this prevents a segfault later (https://github.com/raulmur/ORB_SLAM2/pull/381#issuecomment-337312336)
         return false;
     }
     else
     {
+        std::cout<<"Relocalization success.."<<std::endl;
         mnLastRelocFrameId = mCurrentFrame.mnId;
         return true;
     }

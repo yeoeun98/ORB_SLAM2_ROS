@@ -74,6 +74,8 @@ class Node
     void ParamsChangedCallback(orb_slam2_ros::dynamic_reconfigureConfig &config, uint32_t level);
     bool SaveMapSrv (orb_slam2_ros::SaveMap::Request &req, orb_slam2_ros::SaveMap::Response &res);
     void LoadOrbParameters (ORB_SLAM2::ORBParameters& parameters);
+    void WritePoseTxt (cv::Mat position);
+    void WriteNoneTxt ();
 
     // initialization Transform listener
     boost::shared_ptr<tf2_ros::Buffer> tfBuffer;

@@ -62,7 +62,7 @@ public:
     // Search matches between MapPoints in a KeyFrame and ORB in a Frame.
     // Brute force constrained to ORB that belong to the same vocabulary node (at a certain level)
     // Used in Relocalisation and Loop Detection
-    int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches);
+    int SearchByBoW(KeyFrame *pKF, Frame &F, std::vector<MapPoint*> &vpMapPointMatches, int t_f);
     int SearchByBoW(KeyFrame *pKF1, KeyFrame* pKF2, std::vector<MapPoint*> &vpMatches12);
 
     // Matching for the Map Initialization (only used in the monocular case)
@@ -85,6 +85,7 @@ public:
 public:
 
     static const int TH_LOW;
+    static const int TH_MID;
     static const int TH_HIGH;
     static const int HISTO_LENGTH;
 

@@ -148,6 +148,7 @@ void LocalMapping::ProcessNewKeyFrame()
             {
                 if(!pMP->IsInKeyFrame(mpCurrentKeyFrame))
                 {
+                    // std::cout<<"LocalMapping::ProcessNewKeyFrame() : AddObservation"<<std::endl;
                     pMP->AddObservation(mpCurrentKeyFrame, i);
                     pMP->UpdateNormalAndDepth();
                     pMP->ComputeDistinctiveDescriptors();

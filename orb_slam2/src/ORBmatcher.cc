@@ -35,6 +35,7 @@ namespace ORB_SLAM2
 {
 
 const int ORBmatcher::TH_HIGH = 100;
+const int ORBmatcher::TH_MID = 75;
 const int ORBmatcher::TH_LOW = 50;
 const int ORBmatcher::HISTO_LENGTH = 30;
 
@@ -156,8 +157,9 @@ bool ORBmatcher::CheckDistEpipolarLine(const cv::KeyPoint &kp1,const cv::KeyPoin
     return dsqr<3.84*pKF2->mvLevelSigma2[kp2.octave];
 }
 
-int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPointMatches)
+int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPointMatches, int t_f)
 {
+    // std::cout<<"[SearchByBoW] Timestamp : "<<F.mTimeStamp<<std::endl;
     const vector<MapPoint*> vpMapPointsKF = pKF->GetMapPointMatches();
 
     vpMapPointMatches = vector<MapPoint*>(F.N,static_cast<MapPoint*>(NULL));
@@ -176,6 +178,33 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
     DBoW2::FeatureVector::const_iterator Fit = F.mFeatVec.begin();
     DBoW2::FeatureVector::const_iterator KFend = vFeatVecKF.end();
     DBoW2::FeatureVector::const_iterator Fend = F.mFeatVec.end();
+
+    ofstream Writer;
+    string filePath;
+    if(t_f == 0){
+        filePath = "/home/swm/debug/tracking/SearchByProjection_alldist.txt";
+    } else{
+        filePath = "/home/swm/debug/relocalization/SearchByProjection.txt";
+    }
+    Writer.open(filePath.data(), std::ios::app);
+    Writer.precision(6);
+    Writer.setf(ios_base:: fixed, ios_base:: floatfield);
+
+    if(Writer.is_open()){
+        Writer<<"[SearchByBow] KeyFrame timestamp : "<<pKF->mTimeStamp<<"\n"
+            <<"[SearchByBow] CurrentFrame timestamp : "<<F.mTimeStamp<<"\n";
+    }
+
+    for(int j=0; j<pKF->mvKeysUn.size(); j++){
+        if(Writer.is_open()){
+            Writer<<"[SearchByBow] KeyFrame mvKeysUn : "<<pKF->mvKeysUn[j].pt.x<<" "<<pKF->mvKeysUn[j].pt.y<<"\n";
+        }
+    }
+    for(int i=0; i<F.mvKeysUn.size(); i++){
+        if(Writer.is_open()){
+            Writer<<"[SearchByBow] CurrentFrame mvKeysUn : "<<F.mvKeysUn[i].pt.x<<" "<<F.mvKeysUn[i].pt.y<<"\n";
+        }
+    }
 
     while(KFit != KFend && Fit != Fend)
     {
@@ -202,12 +231,18 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
                 int bestIdxF =-1 ;
                 int bestDist2=256;
 
+                if(Writer.is_open()){
+                    Writer<<"[SearchByBow] KeyFrame mvKeysUn realIdxKF : "<<pKF->mvKeysUn[realIdxKF].pt.x<<" "<<pKF->mvKeysUn[realIdxKF].pt.y<<"\n";
+                }
+
                 for(size_t iF=0; iF<vIndicesF.size(); iF++)
                 {
                     const unsigned int realIdxF = vIndicesF[iF];
 
-                    if(vpMapPointMatches[realIdxF])
+                    if(vpMapPointMatches[realIdxF]){
+                        Writer<<"[SearchByBow] Filtered Current Frame mvKeysUn : "<<F.mvKeysUn[realIdxF].pt.x<<" "<<F.mvKeysUn[realIdxF].pt.y<<"\n";
                         continue;
+                    }
 
                     const cv::Mat &dF = F.mDescriptors.row(realIdxF);
 
@@ -223,12 +258,21 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
                     {
                         bestDist2=dist;
                     }
+
+                    if(Writer.is_open()){
+                        Writer<<"[SearchByBow] CurrentFrame candidate : "<<F.mvKeysUn[realIdxF].pt.x<<" "<<F.mvKeysUn[realIdxF].pt.y<<"\n";
+                        Writer<<"[SearchByBow] CurrentFrame candidate dist : "<<dist<<"\n";
+                    }
                 }
 
                 if(bestDist1<=TH_LOW)
                 {
                     if(static_cast<float>(bestDist1)<mfNNratio*static_cast<float>(bestDist2))
                     {
+                        if(Writer.is_open()){
+                            Writer<<"[SearchByBow] CurrentFrame matched mvKeysUn : "<<pKF->mvKeysUn[realIdxKF].pt.x<<" "<<pKF->mvKeysUn[realIdxKF].pt.y<<" "
+                                                                                    <<F.mvKeysUn[bestIdxF].pt.x<<" "<<F.mvKeysUn[bestIdxF].pt.y<<"\n";
+                        }
                         vpMapPointMatches[bestIdxF]=pMP;
 
                         const cv::KeyPoint &kp = pKF->mvKeysUn[realIdxKF];
@@ -246,6 +290,12 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
                         }
                         nmatches++;
                     }
+                    if(Writer.is_open()){
+                        Writer<<"[SearchByBow] CurrentFrame finally no matched mvKeysUn : "<<F.mvKeysUn[bestIdxF].pt.x<<" "<<F.mvKeysUn[bestIdxF].pt.y<<"\n";
+                    }
+                }
+                if(Writer.is_open()){
+                    Writer<<"[SearchByBow] Candidate End\n";
                 }
 
             }
@@ -278,12 +328,15 @@ int ORBmatcher::SearchByBoW(KeyFrame* pKF,Frame &F, vector<MapPoint*> &vpMapPoin
                 continue;
             for(size_t j=0, jend=rotHist[i].size(); j<jend; j++)
             {
+                if(Writer.is_open()){
+                    Writer<<"[SearchByBoW] DISCARD CurrentFrame mvKeysUn : "<<F.mvKeysUn[rotHist[i][j]].pt.x<<" "<<F.mvKeysUn[rotHist[i][j]].pt.y<<"\n";
+                }
                 vpMapPointMatches[rotHist[i][j]]=static_cast<MapPoint*>(NULL);
                 nmatches--;
             }
         }
     }
-
+    Writer.close();
     return nmatches;
 }
 
@@ -405,6 +458,7 @@ int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const vector<MapP
 int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f> &vbPrevMatched, vector<int> &vnMatches12, int windowSize)
 {
     int nmatches=0;
+    // vnMatches12 size : 6004 일정
     vnMatches12 = vector<int>(F1.mvKeysUn.size(),-1);
 
     vector<int> rotHist[HISTO_LENGTH];
@@ -521,6 +575,7 @@ int ORBmatcher::SearchForInitialization(Frame &F1, Frame &F2, vector<cv::Point2f
 
 int ORBmatcher::SearchByBoW(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint *> &vpMatches12)
 {
+    // std::cout<<"SearchByBow : KeyFrame"<<std::endl;
     const vector<cv::KeyPoint> &vKeysUn1 = pKF1->mvKeysUn;
     const DBoW2::FeatureVector &vFeatVec1 = pKF1->mFeatVec;
     const vector<MapPoint*> vpMapPoints1 = pKF1->GetMapPointMatches();
@@ -1327,6 +1382,26 @@ int ORBmatcher::SearchBySim3(KeyFrame *pKF1, KeyFrame *pKF2, vector<MapPoint*> &
 
 int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, const float th, const bool bMono)
 {
+    const cv::Mat prev_Rcw = LastFrame.mTcw.rowRange(0,3).colRange(0,3);
+    const cv::Mat prev_tcw = LastFrame.mTcw.rowRange(0,3).col(3);
+
+    // For Debug
+    string filePath = "/home/swm/debug/tracking/SearchByProjection_alldist.txt";
+    ofstream Writer_proj;
+    Writer_proj.open(filePath.data(), std::ios::app);
+    Writer_proj.precision(6);
+    Writer_proj.setf(ios_base:: fixed, ios_base:: floatfield);
+    if(Writer_proj.is_open()){
+        Writer_proj<<"[SearchByProjection] LastFrame timestamp : "<<LastFrame.mTimeStamp<<"\n"
+            <<"[SearchByProjection] CurrentFrame timestamp : "<<CurrentFrame.mTimeStamp<<"\n";
+    }
+
+    for(int j=0; j<CurrentFrame.mvKeysUn.size(); j++){
+        if(Writer_proj.is_open()){
+            Writer_proj<<"[SearchByProjection] CurrentFrame mvKeysUn : "<<CurrentFrame.mvKeysUn[j].pt.x<<" "<<CurrentFrame.mvKeysUn[j].pt.y<<"\n";
+        }
+    }
+
     int nmatches = 0;
 
     // Rotation Histogram (to check rotation consistency)
@@ -1352,8 +1427,15 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
     {
         MapPoint* pMP = LastFrame.mvpMapPoints[i];
 
+        // if(Writer_proj.is_open()){
+        //     Writer_proj<<"[SearchByProjection] LastFrame mvKeysUn : "<<LastFrame.mvKeysUn[i].pt.x<<" "<<LastFrame.mvKeysUn[i].pt.y<<"\n";
+        // }
+
         if(pMP)
         {
+            if(Writer_proj.is_open()){
+                Writer_proj<<"[SearchByProjection] LastFrame after pMP : "<<LastFrame.mvKeysUn[i].pt.x<<" "<<LastFrame.mvKeysUn[i].pt.y<<"\n";
+            }
             if(!LastFrame.mvbOutlier[i])
             {
                 // Project
@@ -1370,6 +1452,13 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                 float u = CurrentFrame.fx*xc*invzc+CurrentFrame.cx;
                 float v = CurrentFrame.fy*yc*invzc+CurrentFrame.cy;
 
+                // std::cout<<"vel : "<<Rcw.at<float>(0,0)<<" "<<Rcw.at<float>(0,1)<<" "<<Rcw.at<float>(0,2)<<" "<<tcw.at<float>(0,0)<<" "<<
+                //                     Rcw.at<float>(1,0)<<" "<<Rcw.at<float>(1,1)<<" "<<Rcw.at<float>(1,2)<<" "<<tcw.at<float>(1,0)<<" "<<
+                //                     Rcw.at<float>(2,0)<<" "<<Rcw.at<float>(2,1)<<" "<<Rcw.at<float>(2,2)<<" "<<tcw.at<float>(2,0)<<" "<<std::endl;
+                // std::cout<<"x3Dw : "<<x3Dw.at<float>(0)<<" "<<x3Dw.at<float>(1)<<" "<<x3Dw.at<float>(2)<<std::endl;
+                // std::cout<<"x3Dc : "<<x3Dc.at<float>(0)<<" "<<x3Dc.at<float>(1)<<" "<<x3Dc.at<float>(2)<<std::endl;
+                // std::cout<<"u v : "<<u<<" "<<v<<std::endl;
+
                 if(u<CurrentFrame.mnMinX || u>CurrentFrame.mnMaxX)
                     continue;
                 if(v<CurrentFrame.mnMinY || v>CurrentFrame.mnMaxY)
@@ -1378,7 +1467,10 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                 int nLastOctave = LastFrame.mvKeys[i].octave;
 
                 // Search in a window. Size depends on scale
-                float radius = th*CurrentFrame.mvScaleFactors[nLastOctave];
+                // float radius = th*CurrentFrame.mvScaleFactors[nLastOctave];
+                float radius = 100.0;
+                // float radius = th*CurrentFrame.mvScaleFactors[nLastOctave];
+                // 15에서 50 왔다갔다함
 
                 vector<size_t> vIndices2;
 
@@ -1392,6 +1484,14 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                 if(vIndices2.empty())
                     continue;
 
+                if(Writer_proj.is_open()){
+                    // Writer_proj<<"[SearchByProjection] LastFrame Map Point : "<<x3Dw.at<float>(0)<<" "<<x3Dw.at<float>(1)<<" "<<x3Dw.at<float>(2)<<"\n";
+                    // Writer_proj<<"Prediction "<<Rcw.at<float>(0,0)<<" "<<Rcw.at<float>(0,1)<<" "<<Rcw.at<float>(0,2)<<" "<<tcw.at<float>(0,0)<<" "
+                    //     <<Rcw.at<float>(1,0)<<" "<<Rcw.at<float>(1,1)<<" "<<Rcw.at<float>(1,2)<<" "<<tcw.at<float>(1,0)<<" "
+                    //     <<Rcw.at<float>(2,0)<<" "<<Rcw.at<float>(2,1)<<" "<<Rcw.at<float>(2,2)<<" "<<tcw.at<float>(2,0)<<"\n";
+                    Writer_proj<<"[SearchByProjection] LastFrame Projection : "<<u<<" "<<v<<"\n";
+                }
+
                 const cv::Mat dMP = pMP->GetDescriptor();
 
                 int bestDist = 256;
@@ -1399,10 +1499,16 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
 
                 for(vector<size_t>::const_iterator vit=vIndices2.begin(), vend=vIndices2.end(); vit!=vend; vit++)
                 {
+                // for(int i2=0; i2<CurrentFrame.mvpMapPoints.size(); i2++){
+
                     const size_t i2 = *vit;
                     if(CurrentFrame.mvpMapPoints[i2])
-                        if(CurrentFrame.mvpMapPoints[i2]->Observations()>0)
+                        if(CurrentFrame.mvpMapPoints[i2]->Observations()>0){
+                            // if(Writer_proj.is_open()){
+                            //     Writer_proj<<"[SearchByProjection] CurrentFrame candidate remove : "<<CurrentFrame.mvKeysUn[i2].pt.x<<" "<<CurrentFrame.mvKeysUn[i2].pt.y<<"\n";
+                            // }
                             continue;
+                        }
 
                     if(CurrentFrame.mvuRight[i2]>0)
                     {
@@ -1410,6 +1516,10 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                         const float er = fabs(ur - CurrentFrame.mvuRight[i2]);
                         if(er>radius)
                             continue;
+                    }
+
+                    if(Writer_proj.is_open()){
+                        Writer_proj<<"[SearchByProjection] CurrentFrame candidate : "<<CurrentFrame.mvKeysUn[i2].pt.x<<" "<<CurrentFrame.mvKeysUn[i2].pt.y<<"\n";
                     }
 
                     const cv::Mat &d = CurrentFrame.mDescriptors.row(i2);
@@ -1421,12 +1531,21 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                         bestDist=dist;
                         bestIdx2=i2;
                     }
+
+                    if(Writer_proj.is_open()){
+                        Writer_proj<<"[SearchByProjection] CurrentFrame candidate dist : "<<dist<<"\n";
+                    }
                 }
 
-                if(bestDist<=TH_HIGH)
+                if(bestDist<=TH_LOW)
                 {
                     CurrentFrame.mvpMapPoints[bestIdx2]=pMP;
                     nmatches++;
+
+                    if(Writer_proj.is_open()){
+                        Writer_proj<<"[SearchByProjection] CurrentFrame matched mvKeysUn : "<<LastFrame.mvKeysUn[i].pt.x<<" "<<LastFrame.mvKeysUn[i].pt.y<<" "
+                                                                <<CurrentFrame.mvKeysUn[bestIdx2].pt.x<<" "<<CurrentFrame.mvKeysUn[bestIdx2].pt.y<<"\n";
+                    }
 
                     if(mbCheckOrientation)
                     {
@@ -1440,10 +1559,26 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                         rotHist[bin].push_back(bestIdx2);
                     }
                 }
+                if(Writer_proj.is_open()){
+                    Writer_proj<<"[SearchByProjection] Candidate End\n";
+                }
+
+                // cv::Mat prev_mpC = prev_Rcw * x3Dw + prev_tcw;
+
+                // const float prev_xc = prev_mpC.at<float>(0);
+                // const float prev_yc = prev_mpC.at<float>(1);
+                // const float prev_invzc = 1.0/prev_mpC.at<float>(2);
+
+                // const float U = LastFrame.fx*prev_xc*prev_invzc+LastFrame.cx;
+                // const float V = LastFrame.fy*prev_yc*prev_invzc+LastFrame.cy;
+
+                // if(Writer.is_open()){
+                    // Writer<<"[SearchByProjection] KeyFrame mapPoint : "<<U<<" "<<V<<"\n";
+                // }
             }
         }
     }
-
+    // Writer<<"[SearchByProjection] nmatches : "<<nmatches<<"\n";
     //Apply rotation consistency
     if(mbCheckOrientation)
     {
@@ -1459,18 +1594,60 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
             {
                 for(size_t j=0, jend=rotHist[i].size(); j<jend; j++)
                 {
+                    if(Writer_proj.is_open()){
+                        Writer_proj<<"[SearchByProjection] DISCARD CurrentFrame mvKeysUn : "<<CurrentFrame.mvKeysUn[rotHist[i][j]].pt.x<<" "<<CurrentFrame.mvKeysUn[rotHist[i][j]].pt.y<<"\n";
+                    }
                     CurrentFrame.mvpMapPoints[rotHist[i][j]]=static_cast<MapPoint*>(NULL);
                     nmatches--;
                 }
             }
         }
     }
+    
+    for(int i=0; i<CurrentFrame.mvpMapPoints.size(); i++){
+        MapPoint* cMP = CurrentFrame.mvpMapPoints[i];
+        if(cMP){
+            cv::Mat mpW = cMP->GetWorldPos();
+            cv::Mat mpC = Rcw*mpW+tcw;
 
+            const float xC = mpC.at<float>(0);
+            const float yC = mpC.at<float>(1);
+            const float invzC = 1.0/mpC.at<float>(2);
+
+            const float U = CurrentFrame.fx*xC*invzC+CurrentFrame.cx;
+            const float V = CurrentFrame.fy*yC*invzC+CurrentFrame.cy;
+            if(Writer_proj.is_open()){
+                Writer_proj<<"[SearchByProjection] CurrentFrame mapPoint : "<<U<<" "<<V<<"\n";
+            }
+        }
+    }
+    Writer_proj.close();
     return nmatches;
 }
 
 int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set<MapPoint*> &sAlreadyFound, const float th , const int ORBdist)
 {
+    // For Debug
+    string filePath = "/home/swm/debug/relocalization/SearchByProjection.txt";
+    ofstream Writer;
+    Writer.open(filePath.data(), std::ios::app);
+    Writer.precision(6);
+    Writer.setf(ios_base:: fixed, ios_base:: floatfield);
+    if(Writer.is_open()){
+        Writer<<"[SearchByProjection] KeyFrame timestamp : "<<pKF->mTimeStamp<<"\n"
+            <<"[SearchByProjection] CurrentFrame timestamp : "<<CurrentFrame.mTimeStamp<<"\n";
+    }
+
+
+    const cv::Mat key_Rcw = pKF->GetPose().rowRange(0,3).colRange(0,3);
+    const cv::Mat key_tcw = pKF->GetPose().rowRange(0,3).col(3);
+
+    for(int jj=0; jj<CurrentFrame.mvKeysUn.size(); jj++){
+        if(Writer.is_open()){
+            Writer<<"[SearchByProjection] CurrentFrame mvKeysUn : "<<CurrentFrame.mvKeysUn[jj].pt.x<<" "<<CurrentFrame.mvKeysUn[jj].pt.y<<"\n";
+        }
+    }
+    // std::cout<<"[SearchByProjection, Relocalization] Timestamp : "<<CurrentFrame.mTimeStamp<<std::endl;
     int nmatches = 0;
 
     const cv::Mat Rcw = CurrentFrame.mTcw.rowRange(0,3).colRange(0,3);
@@ -1495,6 +1672,8 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set
             {
                 //Project
                 cv::Mat x3Dw = pMP->GetWorldPos();
+                // std::cout<<"x3Dw : "<<x3Dw<<std::endl;
+                // 키프레임의 map point의 3차원 정보로 보임
                 cv::Mat x3Dc = Rcw*x3Dw+tcw;
 
                 const float xc = x3Dc.at<float>(0);
@@ -1534,7 +1713,8 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set
 
                 int bestDist = 256;
                 int bestIdx2 = -1;
-
+                // std::cout<<"CurrentFrame.mvKeys Size : "<<CurrentFrame.mvKeys.size()<<std::endl;
+                // std::cout<<"CurrentFrame.mDescriptors Size : "<<CurrentFrame.mDescriptors.size()<<std::endl;
                 for(vector<size_t>::const_iterator vit=vIndices2.begin(); vit!=vIndices2.end(); vit++)
                 {
                     const size_t i2 = *vit;
@@ -1542,6 +1722,8 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set
                         continue;
 
                     const cv::Mat &d = CurrentFrame.mDescriptors.row(i2);
+
+                    // std::cout<<"CurrentFrame.mDescriptors.row(i2) Size : "<<CurrentFrame.mDescriptors.row(i2).size()<<std::endl;
 
                     const int dist = DescriptorDistance(dMP,d);
 
@@ -1557,6 +1739,11 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set
                     CurrentFrame.mvpMapPoints[bestIdx2]=pMP;
                     nmatches++;
 
+                    if(Writer.is_open()){
+                        Writer<<"[SearchByProjection] CurrentFrame matched mvKeysUn : "<<pKF->mvKeysUn[i].pt.x<<" "<<pKF->mvKeysUn[i].pt.y<<" "
+                                                                    <<CurrentFrame.mvKeysUn[bestIdx2].pt.x<<" "<<CurrentFrame.mvKeysUn[bestIdx2].pt.y<<"\n";
+                    }
+
                     if(mbCheckOrientation)
                     {
                         float rot = pKF->mvKeysUn[i].angle-CurrentFrame.mvKeysUn[bestIdx2].angle;
@@ -1568,6 +1755,18 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set
                         assert(bin>=0 && bin<HISTO_LENGTH);
                         rotHist[bin].push_back(bestIdx2);
                     }
+                }
+                cv::Mat key_mpC = key_Rcw * x3Dw + key_tcw;
+
+                const float key_xc = key_mpC.at<float>(0);
+                const float key_yc = key_mpC.at<float>(1);
+                const float key_invzc = 1.0/key_mpC.at<float>(2);
+
+                const float U = pKF->fx*key_xc*key_invzc+pKF->cx;
+                const float V = pKF->fy*key_yc*key_invzc+pKF->cy;
+
+                if(Writer.is_open()){
+                    Writer<<"[SearchByProjection] KeyFrame mapPoint : "<<U<<" "<<V<<"\n";
                 }
 
             }
@@ -1594,7 +1793,25 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, KeyFrame *pKF, const set
             }
         }
     }
+    for(int i=0; i<CurrentFrame.mvpMapPoints.size(); i++){
+        MapPoint* cMP = CurrentFrame.mvpMapPoints[i];
+        if(cMP){
+            cv::Mat mpW = CurrentFrame.mvpMapPoints[i]->GetWorldPos();
+            cv::Mat mpC = Rcw*mpW+tcw;
 
+            const float xC = mpC.at<float>(0);
+            const float yC = mpC.at<float>(1);
+            const float invzC = 1.0/mpC.at<float>(2);
+
+            const float U = CurrentFrame.fx*xC*invzC+CurrentFrame.cx;
+            const float V = CurrentFrame.fy*yC*invzC+CurrentFrame.cy;
+            if(Writer.is_open()){
+                Writer<<"CurrentFrame mapPoint : "<<U<<" "<<V<<"\n";
+            }
+        }
+    }
+    Writer<<"[SearchByProjection] end nmatches : "<<nmatches<<"\n";
+    Writer.close();
     return nmatches;
 }
 

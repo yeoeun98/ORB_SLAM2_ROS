@@ -385,8 +385,11 @@ void System::SaveKeyFrameTrajectoryTUM(const string &filename)
     //cv::Mat Two = vpKFs[0]->GetPoseInverse();
 
     ofstream f;
+    ofstream time;
     f.open(filename.c_str());
+    // time.open("/home/swm/log/KF_time.txt");
     f << fixed;
+    // time << fixed;
 
     for(size_t i=0; i<vpKFs.size(); i++)
     {
@@ -399,9 +402,19 @@ void System::SaveKeyFrameTrajectoryTUM(const string &filename)
 
         cv::Mat R = pKF->GetRotation().t();
         vector<float> q = Converter::toQuaternion(R);
+        Eigen::Quaterniond quat;
+        quat.x() = q[0];
+        quat.y() = q[1];
+        quat.z() = q[2];
+        quat.w() = q[3];
+        Eigen::Matrix3d r = quat.normalized().toRotationMatrix();
         cv::Mat t = pKF->GetCameraCenter();
-        f << setprecision(6) << pKF->mTimeStamp << setprecision(7) << " " << t.at<float>(0) << " " << t.at<float>(1) << " " << t.at<float>(2)
-          << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
+        // f << setprecision(6) << pKF->mTimeStamp << setprecision(7) << " " << t.at<float>(0) << " " << t.at<float>(1) << " " << t.at<float>(2)
+        //   << " " << q[0] << " " << q[1] << " " << q[2] << " " << q[3] << endl;
+        f<<setprecision(6)<<pKF->mTimeStamp<<" "<<setprecision(7) << r(0,0) << " " << r(0,1) << " " << r(0,2)<<" "<<t.at<float>(0)<< " "
+                                                                << r(1,0) << " " << r(1,1) << " " << r(1,2)<<" "<<t.at<float>(1)<< " "
+                                                                << r(2,0) << " " << r(2,1) << " " << r(2,2)<<" "<<t.at<float>(2)<<endl;
+        // time << setprecision(9) << pKF->mTimeStamp << endl;
 
     }
 

@@ -528,6 +528,7 @@ void LoopClosing::CorrectLoop()
                 else
                 {
                     mpCurrentKF->AddMapPoint(pLoopMP,i);
+                    std::cout<<"LoopClosing::CorrectLoop() : AddObservation"<<std::endl;
                     pLoopMP->AddObservation(mpCurrentKF,i);
                     pLoopMP->ComputeDistinctiveDescriptors();
                 }

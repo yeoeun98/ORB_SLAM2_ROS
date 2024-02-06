@@ -15,7 +15,7 @@ Node::~Node () {
   orb_slam_->Shutdown();
 
   // Save camera trajectory
-  orb_slam_->SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
+  orb_slam_->SaveKeyFrameTrajectoryTUM("/home/swm/log/KeyFrameTrajectory.txt");
 
   delete orb_slam_;
 }
@@ -74,6 +74,11 @@ void Node::Update () {
     if (publish_pose_param_) {
       PublishPositionAsPoseStamped(position);
     }
+
+    WritePoseTxt(position);
+  }
+  else{
+    WriteNoneTxt ();
   }
 
   PublishRenderedImage (orb_slam_->DrawCurrentFrame());
@@ -84,6 +89,56 @@ void Node::Update () {
 
   PublishGBAStatus (orb_slam_->isRunningGBA());
 
+}
+
+void Node::WritePoseTxt (cv::Mat position) {
+  tf2::Transform tf_position = TransformFromMat(position);
+
+  // Make transform from camera frame to target frame
+  tf2::Transform tf_position_target = TransformToTarget(tf_position, camera_frame_id_param_, target_frame_id_param_);
+  
+  // Make message
+  tf2::Stamped<tf2::Transform> tf_position_target_stamped;
+  tf_position_target_stamped = tf2::Stamped<tf2::Transform>(tf_position_target, current_frame_time_, map_frame_id_param_);
+  geometry_msgs::PoseStamped pose_msg;
+  tf2::toMsg(tf_position_target_stamped, pose_msg);
+
+  // make pose txt file
+  // string filePath = "/home/swm/log/pose.txt";
+  // ofstream PoseWriteFile;
+  // PoseWriteFile.open(filePath.data(), std:: ios::app);
+
+  Eigen::Quaterniond q;
+  q.x() = pose_msg.pose.orientation.x;
+  q.y() = pose_msg.pose.orientation.y;
+  q.z() = pose_msg.pose.orientation.z;
+  q.w() = pose_msg.pose.orientation.w;
+
+  Eigen::Matrix3d R = q.normalized().toRotationMatrix();
+
+  // if(PoseWriteFile.is_open()){
+  //   // map coordinate to camera coordinate
+  //   PoseWriteFile<<R(0,0)<<" "<<R(0,1)<<" "<<R(0,2)<<" "<<-pose_msg.pose.position.y
+  //     <<" "<<R(1,0)<<" "<<R(1,1)<<" "<<R(1,2)<<" "<<-pose_msg.pose.position.z
+  //     <<" "<<R(2,0)<<" "<<R(2,1)<<" "<<R(2,2)<<" "<<pose_msg.pose.position.x<<"\n";
+  // }
+}
+
+void Node::WriteNoneTxt () {
+
+  // make pose txt file
+  string filePath = "/home/swm/log/pose.txt";
+  ofstream PoseWriteFile;
+  PoseWriteFile.open(filePath.data(), std:: ios::app);
+
+  int value = 0.0;
+
+  if(PoseWriteFile.is_open()){
+    // map coordinate to camera coordinate
+    PoseWriteFile<<value<<" "<<value<<" "<<value<<" "<<value
+      <<" "<<value<<" "<<value<<" "<<value<<" "<<value
+      <<" "<<value<<" "<<value<<" "<<value<<" "<<value<<"\n";
+  }
 }
 
 
@@ -304,7 +359,7 @@ bool Node::SaveMapSrv (orb_slam2_ros::SaveMap::Request &req, orb_slam2_ros::Save
 
 void Node::LoadOrbParameters (ORB_SLAM2::ORBParameters& parameters) {
   //ORB SLAM configuration parameters
-  node_handle_.param(name_of_node_ + "/camera_fps", parameters.maxFrames, 30);
+  node_handle_.param(name_of_node_ + "/camera_fps", parameters.maxFrames, 10);
   node_handle_.param(name_of_node_ + "/camera_rgb_encoding", parameters.RGB, true);
   node_handle_.param(name_of_node_ + "/ORBextractor/nFeatures", parameters.nFeatures, 1200);
   node_handle_.param(name_of_node_ + "/ORBextractor/scaleFactor", parameters.scaleFactor, static_cast<float>(1.2));

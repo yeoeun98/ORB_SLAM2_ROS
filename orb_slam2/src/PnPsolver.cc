@@ -173,6 +173,7 @@ cv::Mat PnPsolver::iterate(int nIterations, bool &bNoMore, vector<bool> &vbInlie
     if(N<mRansacMinInliers)
     {
         bNoMore = true;
+        std::cout<<"too small N than mRansacMinInliers... "<<std::endl;
         return cv::Mat();
     }
 
@@ -253,7 +254,7 @@ cv::Mat PnPsolver::iterate(int nIterations, bool &bNoMore, vector<bool> &vbInlie
             return mBestTcw.clone();
         }
     }
-
+    std::cout<<"too small mnIterations than mRansacMaxIts... "<<std::endl;
     return cv::Mat();
 }
 

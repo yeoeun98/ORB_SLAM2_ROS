@@ -108,6 +108,9 @@ public:
     Frame mCurrentFrame;
     cv::Mat mImGray;
 
+    // Last Framee
+    cv::Mat lastImGray;
+
     // Initialization Variables (Monocular)
     std::vector<int> mvIniLastMatches;
     std::vector<int> mvIniMatches;
@@ -150,6 +153,7 @@ protected:
     void UpdateLocalPoints();
     void UpdateLocalKeyFrames();
 
+    // bool TrackLocalMap(const int &val);
     bool TrackLocalMap();
     void SearchLocalPoints();
 
@@ -219,6 +223,12 @@ protected:
     Frame mLastFrame;
     unsigned int mnLastKeyFrameId;
     unsigned int mnLastRelocFrameId;
+
+    //Relocalization : customize initialization()
+    Initializer* reInitializer;
+    std::vector<cv::Point2f> mvbLastMatched;
+    std::vector<int> mvRelocMatches;
+    std::vector<cv::Point3f> mvReP3D;
 
     //Motion Model
     cv::Mat mVelocity;
