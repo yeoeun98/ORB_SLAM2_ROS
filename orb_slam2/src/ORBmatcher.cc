@@ -35,6 +35,7 @@ namespace ORB_SLAM2
 {
 
 const int ORBmatcher::TH_HIGH = 100;
+const int ORBmatcher::TH_MID = 75;
 const int ORBmatcher::TH_LOW = 50;
 const int ORBmatcher::HISTO_LENGTH = 30;
 
@@ -1378,7 +1379,8 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                 int nLastOctave = LastFrame.mvKeys[i].octave;
 
                 // Search in a window. Size depends on scale
-                float radius = th*CurrentFrame.mvScaleFactors[nLastOctave];
+                // float radius = th*CurrentFrame.mvScaleFactors[nLastOctave];
+                float radius = 150;
 
                 vector<size_t> vIndices2;
 
@@ -1423,7 +1425,7 @@ int ORBmatcher::SearchByProjection(Frame &CurrentFrame, const Frame &LastFrame, 
                     }
                 }
 
-                if(bestDist<=TH_HIGH)
+                if(bestDist<=TH_LOW)
                 {
                     CurrentFrame.mvpMapPoints[bestIdx2]=pMP;
                     nmatches++;
